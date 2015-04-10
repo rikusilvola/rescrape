@@ -32,6 +32,10 @@ def datewriter(date, data):
     day['comics'][name]['url'] = data['comics'][name]['url']
     day['comics'][name]['baseurl'] = data['comics'][name]['baseurl']
   dayfile = 'day/'+date+'.json'
+  try:
+    os.makedirs('day')
+  except:
+    pass 
   if (date == today_in_seconds or date == yesterday_in_seconds):
     with open(dayfile, 'w', encoding='utf-8') as f:
       json.dump(day, f)
