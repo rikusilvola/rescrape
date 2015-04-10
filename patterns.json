@@ -1,0 +1,9 @@
+{
+  "rescrape": {
+    "url": "https://github.com/riqpe/rescrape",
+    "pattern": "alt=\\\"(?P<title>.+?)\\\"\\s+?src=\\\"(?P<file>/riqpe/rescrape/raw/master/target\.png)",
+    "name": "Rescrape on GitHub",
+    "feed": "https://github.com/riqpe/rescrape/blob/master/feed.md",
+    "baseurl": "https://github.com"
+  }
+}
