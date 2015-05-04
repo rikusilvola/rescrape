@@ -13,7 +13,8 @@ import errno
 import os
 
 #options
-_header_data = [('User-Agent', 'Mozilla/5.0')]
+_img_headers = [('User-Agent', 'Mozilla/31.0')]
+_feed_headers = {'User-Agent':'Mozilla/5.0'}
 _data_dir = 'data'
 _img_dir = 'img'
 _cache_dir = '.cache'
@@ -55,7 +56,7 @@ def export_daydata(date, data):
   # consider reading current json file to detect changes
   day = initDay(date, data)
   daydir = _data_dir + '/days/'
-  dayfile = daydir+date+'.json'
+  dayfile = daydir + date + '.json'
   if os.path.isdir(daydir) == False: # create directories if not existing
     try:
       os.makedirs(daydir)
@@ -82,22 +83,26 @@ def export_metadata(data):
   for name in data:
     names['meta'][name] = {}
     names['meta'][name]['name'] = data[name]['name']
+    names['meta'][name]['errors'] = data[name]['errors']
+    names['meta'][name]['last'] = data[name]['last']
   return names
 
 def sanitize_url(url):
   url = urllib.parse.urlsplit(url)
   url = list(url)
+  if (url[0] == ''): #scheme
+    url[0] = 'http'
   url[2] = urllib.parse.quote(url[2])
   url = urllib.parse.urlunsplit(url)
   return url
 
-def write_image_file(baseurl, fileurl, name, ret = ''):
-  url = sanitize_url(baseurl + fileurl)
+def write_image_file(ref, url, name, ret = ''):
+  url = sanitize_url(url)
   try:
     one = 1
     opener = urllib.request.build_opener()
-    header = _header_data
-    header.append(('Referer', baseurl))
+    header = _img_headers[0:]
+    header.append(('Referer', ref)) # add refer to get passed referer checks
     opener.addheaders = header
     content = opener.open(url)
     content = content.read()
@@ -147,11 +152,12 @@ def write_image_file(baseurl, fileurl, name, ret = ''):
     if (ret == ''):
       os.remove(imagefile)
   except Exception as e:
+    print("Unknown error while getting or writing image file for " + name, file=stderr)
     print(e, file=stderr)
     pass
   return ret
 
-def parser(comicdata, h, data):
+def init_data(data, patterns):
   try:
     for date in data['dates']: # remove duplicates
       data['dates'][date] = set(data['dates'][date])
@@ -161,25 +167,29 @@ def parser(comicdata, h, data):
       data['comics']
     except KeyError:
       data['comics'] = {}
-  for name in comicdata:
+  for name in patterns:
     try:
-      baseurl = comicdata[name]['baseurl']
+      baseurl = patterns[name]['baseurl']
     except KeyError:
       baseurl = ""
-    comic = name
-    url = comicdata[name]['url']
-    pattern = comicdata[name]['pattern']
-    comicname = comicdata[name]['name']
-    try:
-      url_to_parse = comicdata[name]['feed']
-    except KeyError:
-      url_to_parse = url
+    url = patterns[name]['url']
+    comicname = patterns[name]['name']
     try:
       data['comics'][name]
     except KeyError:
       data['comics'][name] = {}
+    try:
+      data['comics'][name]['file']
+    except KeyError:
       data['comics'][name]['file'] = []
+    try:
+      data['comics'][name]['alttxt']
+    except KeyError:
       data['comics'][name]['alttxt'] = {}
+    try:
+      data['comics'][name]['errors']
+    except KeyError:
+      data['comics'][name]['errors'] = 0
     try:
       data['comics'][name]['local']
     except KeyError:
@@ -187,20 +197,34 @@ def parser(comicdata, h, data):
     data['comics'][name]['name'] = comicname
     data['comics'][name]['url'] = url
     data['comics'][name]['baseurl'] = baseurl
+  return data
+
+def parser(patterns, h, data):
+  data = init_data(data, patterns)
+  for name in patterns:
+    pattern = patterns[name]['pattern']
+    url = patterns[name]['url']
     try:
-      response, content = h.request(url_to_parse, headers=dict(_header_data))
-    except httplib2.ServerNotFoundError:
+      url_to_parse = patterns[name]['feed']
+    except KeyError:
+      url_to_parse = url
+    try:
+      response, content = h.request(url_to_parse, headers=_feed_headers) #httplib2 takes dictionary of headers
+    except httplib2.ServerNotFoundError as e:
       print(name + " ServerNotFound: " + url_to_parse, file=stderr)
+      if _debug:
+        print(e, file=stderr)
       continue
     except BaseException as e:
-      print(e, file=stderr)
       try:
         errno_ = e.errno
         if errno_ == errno.ECONNRESET:
           print(name + ': reset connection', file=stderr)
           continue
-      except Exception as e:
-        print(e, file=stderr)
+      except NameError as e:
+        if _debug:
+          print("Unknown request error", file=stderr)
+          print(e, file=stderr)
         continue
     try:
       content_type = type(content)
@@ -216,7 +240,10 @@ def parser(comicdata, h, data):
         except UnicodeDecodeError:
           try:
             content = content.decode('ascii')
-          except UnicodeDecodeError:
+          except UnicodeDecodeError as e:
+            print("Unable to decode page for " + name, file=stderr)
+            if _debug:
+              print(e, file=stderr)
             continue
     if (response.status == 200):
       match = re.search(pattern, content, re.DOTALL)
@@ -254,10 +281,10 @@ def parser(comicdata, h, data):
             data['dates'][today_in_seconds]
           except KeyError:
             data['dates'][today_in_seconds] = set()
-          data['dates'][today_in_seconds].add(comic)
+          data['dates'][today_in_seconds].add(name)
         if (fileurl not in data['comics'][name]['local']):
           local_file_name = ''
-          local_file_name = write_image_file(data['comics'][name]['baseurl'], fileurl, name, local_file_name)
+          local_file_name = write_image_file(url_to_parse, data['comics'][name]['baseurl'] + fileurl, name, local_file_name)
           if (local_file_name != ''):
             data['comics'][name]['local'][fileurl] = local_file_name
     else:
@@ -288,12 +315,11 @@ def usage():
       '-m, --export-meta        : export meta data\n'
       '--meta-file file         : specify output meta data file\n'
       '--no-scrape              : do not scrape\n'
-      '--no-cache               : ignore cache\n'
       )
 
 def readArgs(args):
   try:
-    opts, args = getopt.getopt(args, "hp:i:o:md", ["help", "pattern-file=", "input=", "output=", "io=", "export-days", "rebuild-days", "img-dir=", "data-dir=", "cache-dir=", "debug", "export-meta", "meta-file=", "no-scrape", "no-cache"])
+    opts, args = getopt.getopt(args, "hp:i:o:md", ["help", "pattern-file=", "input=", "output=", "io=", "export-days", "rebuild-days", "img-dir=", "data-dir=", "cache-dir=", "debug", "export-meta", "meta-file=", "no-scrape"])
   except getopt.GetoptError:
     usage()
     exit(2)
@@ -309,7 +335,6 @@ def readArgs(args):
   global _cache_dir 
   global _debug
   global _no_scrape
-  global _header_data
   for opt, arg in opts:
     if opt in ("-h", "--help"):
       usage()
@@ -342,8 +367,6 @@ def readArgs(args):
       _debug = True
     elif opt == "--no-scrape":
       _no_scrape = True
-    elif opt == "--no-cache":
-      _header_data.append(('cache-control', 'no-cache'))
   if _debug:
     print('Options:\n'
         '_input_json : "'   + _input_json + '"\n'
@@ -357,7 +380,6 @@ def readArgs(args):
         '_no_scrape : "'    + str(_no_scrape) + '"\n'
         '_export_meta : "'  + str(_export_meta) + '"\n'
         '_meta_json : "'    + _meta_json + '"\n'
-        '_no_cache : "'     + str(_no_cache) + '"\n'
         '_debug : "'        + str(_debug) + '"\n')
 
 def main():
@@ -365,7 +387,7 @@ def main():
   try:
     with open(_pattern_json, 'r', encoding='utf-8') as f:
       try:
-        comicdata = json.load(f)
+        patterns = json.load(f)
       except Exception as e:
         print("Malformed pattern file, exiting...", file=stderr)
         if (_debug):
@@ -399,7 +421,7 @@ def main():
       exit(2)
   h = httplib2.Http(_cache_dir)
   if _no_scrape == False:
-    data = parser(comicdata, h, data)
+    data = parser(patterns, h, data)
   if _export_meta:
     meta = export_metadata(data['comics'])
     if _meta_json != '':
