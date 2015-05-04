@@ -13,7 +13,7 @@ import errno
 import os
 
 #options
-_img_headers = [('User-Agent', 'Mozilla/31.0')]
+_img_headers = [('User-Agent', 'Mozilla/5.0')] 
 _feed_headers = {'User-Agent':'Mozilla/5.0'}
 _data_dir = 'data'
 _img_dir = 'img'
