@@ -32,24 +32,24 @@ _mode = 0o777
 
 def initDay(date, data):
   day = {}
-  day['comics'] = {}
+  day['data'] = {}
   for name in data['dates'][date]:
-    day['comics'][name] = {}
-    day['comics'][name]['file'] = []
-    day['comics'][name]['alttxt'] = {}
-    day['comics'][name]['local'] = {}
-    day['comics'][name][date] = []
-    day['comics'][name][date] = data['comics'][name][date]
-    for filename in day['comics'][name][date]:
-      day['comics'][name]['alttxt'][filename] = data['comics'][name]['alttxt'][filename]
+    day['data'][name] = {}
+    day['data'][name]['file'] = []
+    day['data'][name]['alttxt'] = {}
+    day['data'][name]['local'] = {}
+    day['data'][name][date] = []
+    day['data'][name][date] = data['data'][name][date]
+    for filename in day['data'][name][date]:
+      day['data'][name]['alttxt'][filename] = data['data'][name]['alttxt'][filename]
       try:
-        data['comics'][name]['local'][filename]
-        day['comics'][name]['local'][filename] = data['comics'][name]['local'][filename]
+        data['data'][name]['local'][filename]
+        day['data'][name]['local'][filename] = data['data'][name]['local'][filename]
       except KeyError: # no local file
         pass
-    day['comics'][name]['name'] = data['comics'][name]['name']
-    day['comics'][name]['url'] = data['comics'][name]['url']
-    day['comics'][name]['baseurl'] = data['comics'][name]['baseurl']
+    day['data'][name]['name'] = data['data'][name]['name']
+    day['data'][name]['url'] = data['data'][name]['url']
+    day['data'][name]['baseurl'] = data['data'][name]['baseurl']
   return day
 
 def export_daydata(date, data):
@@ -85,8 +85,10 @@ def export_metadata(data):
   for name in data:
     names['meta'][name] = {}
     names['meta'][name]['name'] = data[name]['name']
-    names['meta'][name]['errors'] = data[name]['errors']
-    names['meta'][name]['last'] = data[name]['last']
+    try:
+      names['meta'][name]['last'] = data[name]['last']
+    except KeyError:
+      names['meta'][name]['last'] = 0 
   return names
 
 def sanitize_url(url):
@@ -194,9 +196,9 @@ def init_data(data, patterns):
   except KeyError:
     data['dates'] = {}
     try:
-      data['comics']
+      data['data']
     except KeyError:
-      data['comics'] = {}
+      data['data'] = {}
   for name in patterns:
     try:
       baseurl = patterns[name]['baseurl']
@@ -205,28 +207,24 @@ def init_data(data, patterns):
     url = patterns[name]['url']
     comicname = patterns[name]['name']
     try:
-      data['comics'][name]
+      data['data'][name]
     except KeyError:
-      data['comics'][name] = {}
+      data['data'][name] = {}
     try:
-      data['comics'][name]['file']
+      data['data'][name]['file']
     except KeyError:
-      data['comics'][name]['file'] = []
+      data['data'][name]['file'] = []
     try:
-      data['comics'][name]['alttxt']
+      data['data'][name]['alttxt']
     except KeyError:
-      data['comics'][name]['alttxt'] = {}
+      data['data'][name]['alttxt'] = {}
     try:
-      data['comics'][name]['errors']
+      data['data'][name]['local']
     except KeyError:
-      data['comics'][name]['errors'] = 0
-    try:
-      data['comics'][name]['local']
-    except KeyError:
-      data['comics'][name]['local'] = {}
-    data['comics'][name]['name'] = comicname
-    data['comics'][name]['url'] = url
-    data['comics'][name]['baseurl'] = baseurl
+      data['data'][name]['local'] = {}
+    data['data'][name]['name'] = comicname
+    data['data'][name]['url'] = url
+    data['data'][name]['baseurl'] = baseurl
   return data
 
 def parser(patterns, h, data):
@@ -278,16 +276,17 @@ def parser(patterns, h, data):
       alt = re.sub("['\"]", "&#39", alt);
       if (fileurl != None):
         today_in_seconds = repr(int((time.mktime(datetime.date.today().timetuple()))*1000))
-        if (fileurl not in data['comics'][name]['file']):
-          data['comics'][name]['file'].append(fileurl)
-          data['comics'][name]['alttxt'][fileurl] = alt
+        if (fileurl not in data['data'][name]['file']):
+          data['data'][name]['file'].append(fileurl)
+          data['data'][name]['alttxt'][fileurl] = alt
+          data['data'][name]['last'] = today_in_seconds
           try:
-            data['comics'][name][today_in_seconds] = set(data['comics'][name][today_in_seconds])
+            data['data'][name][today_in_seconds] = set(data['data'][name][today_in_seconds])
           except:
-            data['comics'][name][today_in_seconds] = set()
-          data['comics'][name][today_in_seconds].add(fileurl)
-          data['comics'][name][today_in_seconds] = list(data['comics'][name][today_in_seconds])
-        if today_in_seconds in data['comics'][name]:
+            data['data'][name][today_in_seconds] = set()
+          data['data'][name][today_in_seconds].add(fileurl)
+          data['data'][name][today_in_seconds] = list(data['data'][name][today_in_seconds])
+        if today_in_seconds in data['data'][name]:
           try:
             data['dates']
           except KeyError:
@@ -297,11 +296,11 @@ def parser(patterns, h, data):
           except KeyError:
             data['dates'][today_in_seconds] = set()
           data['dates'][today_in_seconds].add(name)
-        if (_store_img and fileurl not in data['comics'][name]['local']):
+        if (_store_img and fileurl not in data['data'][name]['local']):
           local_file_name = ''
-          local_file_name = write_image_file(url_to_parse, data['comics'][name]['baseurl'] + fileurl, name, local_file_name)
+          local_file_name = write_image_file(url_to_parse, data['data'][name]['baseurl'] + fileurl, name, local_file_name)
           if (local_file_name != ''):
-            data['comics'][name]['local'][fileurl] = local_file_name
+            data['data'][name]['local'][fileurl] = local_file_name
     else:
         print(name + ': Error response ' + str(response.status))
   try:
@@ -448,7 +447,7 @@ def main():
   if _no_scrape == False:
     data = parser(patterns, h, data)
   if _export_meta:
-    meta = export_metadata(data['comics'])
+    meta = export_metadata(data['data'])
     if _meta_json != '':
       try:
         with open(_meta_json, 'w', encoding='utf-8') as f:
