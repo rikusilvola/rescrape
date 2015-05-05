@@ -336,7 +336,7 @@ def usage():
 
 def readArgs(args):
   try:
-    opts, args = getopt.getopt(args, "hp:i:o:mdl", ["help", "pattern-file=", "input=", "output=", "io=", "export-days", "rebuild-days", "img-dir=", "data-dir=", "cache-dir=", "debug", "export-meta", "meta-file=", "no-scrape", "store-local-copy", "--rebuild-image-db"])
+    opts, args = getopt.getopt(args, "hp:i:o:mdl", ["help", "pattern-file=", "input=", "output=", "io=", "export-days", "rebuild-days", "img-dir=", "data-dir=", "cache-dir=", "debug", "export-meta", "meta-file=", "no-scrape", "store-local-copy", "rebuild-image-db"])
   except getopt.GetoptError:
     usage()
     exit(2)
