@@ -22,11 +22,13 @@ _pattern_json = ''
 _input_json = ''
 _output_json = ''
 _meta_json = ''
+_store_img = False
 _no_scrape = False
 _rebuild_days = False
 _export_days = False
 _export_meta = False
 _debug = False
+_mode = 0o777
 
 def initDay(date, data):
   day = {}
@@ -96,7 +98,65 @@ def sanitize_url(url):
   url = urllib.parse.urlunsplit(url)
   return url
 
-def write_image_file(ref, url, name, ret = ''):
+def decode_to_str(content, suggestion = ''):
+  codes = ['utf-8', 'windows-1252', 'ascii']
+  try:
+    content_type = type(content)
+  except UnboundLocalError:
+    print(e, ": " + name + ' has no content', file=stderr)
+    return ''
+  if content_type is not str:
+    if suggestion != '':
+      try:
+        content = content.decode(suggestion)
+      except UnicodeDecodeError as e:
+        if _debug:
+          print(e + ": Suggested decoding not succesful.", file=stderr)
+        pass
+    for code in codes:
+      if code == suggestion:
+        continue
+      try:
+        content = content.decode(code)
+        break # not reached if decode not succesful
+      except UnicodeDecodeError as e:
+        if _debug:
+          print(e + ": Content not encoded with " + code, file=stderr)
+        continue
+  return content
+
+def replace_file(directory, filename, content, binary = True):
+  full_path = directory + filename 
+  write_mode = 'wb' if binary else 'w'
+  if os.path.isdir(directory) == False: # create directories if not existing
+    try:
+      os.makedirs(directory, _mode)
+    except IOError as e:
+      print('Cannot create img directory', file=stderr)
+      if _debug:
+        print(e, file=stderr)
+      return False
+  if os.path.exists(full_path): # try to remove first
+    try:
+      os.remove(full_path)
+    except: # raised if not a file or on windows if file in use
+      pass
+  try:
+    with open(full_path, write_mode) as f:
+      f.write(content)
+  except IOError as e:
+    print('fwerr: Could not write file to ' + full_path, file=stderr)
+    if (_debug):
+      print(e, file=stderr)
+    return False
+  except Exception as e:
+    print('fwerr: Un-identified error while writing file (exists?) ' + full_path, file=stderr)
+    if (_debug):
+      print(e, file=stderr)
+    return False
+  return True
+
+def write_image_file(ref, url, name, filename = ''):
   url = sanitize_url(url)
   try:
     one = 1
@@ -104,58 +164,28 @@ def write_image_file(ref, url, name, ret = ''):
     header = _img_headers[0:]
     header.append(('Referer', ref)) # add refer to get passed referer checks
     opener.addheaders = header
-    content = opener.open(url)
-    content = content.read()
-    decoded = content
-    if (type(content) is not str):
-      try:
-        decoded = content.decode('utf-8')
-      except UnicodeDecodeError:
-        try:
-          decoded = content.decode('windows-1252')
-        except UnicodeDecodeError:
-          try:
-            decoded = content.decode('ascii')
-          except UnicodeDecodeError:
-            time_right_now = repr(int(time.mktime(time.localtime())))+datetime.datetime.now().strftime('%f')
-            directory = _img_dir + '/' + name + '/'
-            imagefile = directory + time_right_now
-            if os.path.isdir(directory) == False: # create directories if not existing
-              try:
-                os.makedirs(directory)
-              except IOError as e:
-                print('Cannot create img directory', file=stderr)
-                if _debug:
-                  print(e, file=stderr)
-            try:
-              with open(imagefile, 'wb') as f:
-                f.write(content)
-                ret = time_right_now
-            except IOError as e:
-              ret = ''
-              print('fwerr: Could not write file to ' + imagefile, file=stderr)
-              if (_debug):
-                print(e, file=stderr)
-            except Exception as e:
-              ret = ''
-              print('fwerr: Un-identified error while writing file (exists?) ' + imagefile, file=stderr)
-              if (_debug):
-                print(e, file=stderr)
-      except Exception as e:
-        ret = ''
-        print(name + ': Un-identified error while trying to decode file ' + imagefile, file=stderr)
-        if (_debug):
-          print(e, file=stderr)
-      if (type(decoded) is str):
-        ret = ''
+    resource = opener.open(url)
+    content = resource.read()
+    if content:
+      if "image" in resource.info()['Content-Type'] and type(content) is not str:
+        decoded = content
+      else:
+        decoded = decode_to_str(content) # try to see if content can be decoded to str
+      if (type(decoded) is not str):     # decoding was unsuccesful
+        directory = _img_dir + '/' + name + '/'
+        if filename == '' or os.path.exists(directory + filename) == False:
+          filename = repr(int(time.mktime(time.localtime())))+datetime.datetime.now().strftime('%f')
+        if replace_file(directory, filename, content, True) == False:
+          filename = ''
+      else:
         print(name + ': image url returned string', file=stderr)
-    if (ret == ''):
-      os.remove(imagefile)
   except Exception as e:
-    print("Unknown error while getting or writing image file for " + name, file=stderr)
-    print(e, file=stderr)
+    print("Unknown error while getting image file for " + name, file=stderr)
+    if _debug:
+      print(e, file=stderr)
     pass
-  return ret
+  finally:
+    return filename
 
 def init_data(data, patterns):
   try:
@@ -226,25 +256,10 @@ def parser(patterns, h, data):
           print("Unknown request error", file=stderr)
           print(e, file=stderr)
         continue
-    try:
-      content_type = type(content)
-    except UnboundLocalError:
-      print(name + ': has no content', file=stderr)
+    content = decode_to_str(content)
+    if content == '' or type(content) is not str:
+      print("Unable to decode page for " + name, file=stderr)
       continue
-    if (type(content) is not str):
-      try:
-        content = content.decode('utf-8')
-      except UnicodeDecodeError:
-        try:
-          content = content.decode('windows-1252')
-        except UnicodeDecodeError:
-          try:
-            content = content.decode('ascii')
-          except UnicodeDecodeError as e:
-            print("Unable to decode page for " + name, file=stderr)
-            if _debug:
-              print(e, file=stderr)
-            continue
     if (response.status == 200):
       match = re.search(pattern, content, re.DOTALL)
       try:
@@ -282,7 +297,7 @@ def parser(patterns, h, data):
           except KeyError:
             data['dates'][today_in_seconds] = set()
           data['dates'][today_in_seconds].add(name)
-        if (fileurl not in data['comics'][name]['local']):
+        if (_store_img and fileurl not in data['comics'][name]['local']):
           local_file_name = ''
           local_file_name = write_image_file(url_to_parse, data['comics'][name]['baseurl'] + fileurl, name, local_file_name)
           if (local_file_name != ''):
@@ -307,9 +322,11 @@ def usage():
       '-i, --input=file         : specify input file\n'
       '-o, --output=file        : specify output file\n'
       '--io file                : specify input-output file\n'
-      '--img-dir=path           : specify directory to write image files to\n'
       '--data-dir=path          : specify directory to write json files to\n'
       '--cache-dir=path         : specify directory to write caches to\n'
+      '-l, --store-local-copy   : store local copy of matched images\n'
+      '--img-dir=path           : specify directory to write image files to\n'
+      '--rebuild-image-db       : redownload all images\n'
       '-d, --export-days        : export days to separate json files\n'
       '--rebuild-days           : rebuild all day files\n'
       '-m, --export-meta        : export meta data\n'
@@ -319,7 +336,7 @@ def usage():
 
 def readArgs(args):
   try:
-    opts, args = getopt.getopt(args, "hp:i:o:md", ["help", "pattern-file=", "input=", "output=", "io=", "export-days", "rebuild-days", "img-dir=", "data-dir=", "cache-dir=", "debug", "export-meta", "meta-file=", "no-scrape"])
+    opts, args = getopt.getopt(args, "hp:i:o:mdl", ["help", "pattern-file=", "input=", "output=", "io=", "export-days", "rebuild-days", "img-dir=", "data-dir=", "cache-dir=", "debug", "export-meta", "meta-file=", "no-scrape", "store-local-copy", "--rebuild-image-db"])
   except getopt.GetoptError:
     usage()
     exit(2)
@@ -335,6 +352,7 @@ def readArgs(args):
   global _cache_dir 
   global _debug
   global _no_scrape
+  global _store_img
   for opt, arg in opts:
     if opt in ("-h", "--help"):
       usage()
@@ -358,6 +376,7 @@ def readArgs(args):
     elif opt == "--rebuild-days":
       _rebuild_days = True
     elif opt == "--img-dir":
+      _store_img = True
       _img_dir = arg
     elif opt == "--data-dir":
       _data_dir = arg
@@ -367,6 +386,11 @@ def readArgs(args):
       _debug = True
     elif opt == "--no-scrape":
       _no_scrape = True
+    elif opt in ("-l", "--store-local-copy"):
+      _store_img = True
+    elif opt == "--rebuild-image-db":
+      print("Rebuilding image db not implemented")
+      exit(2)
   if _debug:
     print('Options:\n'
         '_input_json : "'   + _input_json + '"\n'
@@ -374,6 +398,7 @@ def readArgs(args):
         '_pattern_json : "' + _pattern_json + '"\n'
         '_export_days : '   + str(_export_days) + '\n'
         '_rebuild_days : '  + str(_rebuild_days) + '\n'
+        '_store_img: '      + str(_store_img) + '\n'
         '_img_dir : "'      + _img_dir + '"\n'
         '_data_dir : "'     + _data_dir + '"\n'
         '_cache_dir : "'    + _cache_dir + '"\n'
