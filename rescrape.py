@@ -190,6 +190,8 @@ def write_image_file(ref, url, name, filename = ''):
     return filename
 
 def init_data(data, patterns):
+  keys = ['file', 'alttxt', 'local', 'last']
+  objs = {'file': [], 'alttxt': {}, 'local': {}, 'last': 0}
   try:
     for date in data['dates']: # remove duplicates
       data['dates'][date] = set(data['dates'][date])
@@ -201,30 +203,21 @@ def init_data(data, patterns):
       data['data'] = {}
   for name in patterns:
     try:
-      baseurl = patterns[name]['baseurl']
-    except KeyError:
-      baseurl = ""
-    url = patterns[name]['url']
-    comicname = patterns[name]['name']
-    try:
       data['data'][name]
     except KeyError:
       data['data'][name] = {}
+    for key in keys: # init key if not exist
+      try:
+        data['data'][name][key]
+      except KeyError:
+        data['data'][name][key] = objs[key]
     try:
-      data['data'][name]['file']
+      baseurl = patterns[name]['baseurl']
     except KeyError:
-      data['data'][name]['file'] = []
-    try:
-      data['data'][name]['alttxt']
-    except KeyError:
-      data['data'][name]['alttxt'] = {}
-    try:
-      data['data'][name]['local']
-    except KeyError:
-      data['data'][name]['local'] = {}
-    data['data'][name]['name'] = comicname
-    data['data'][name]['url'] = url
+      baseurl = ""
     data['data'][name]['baseurl'] = baseurl
+    data['data'][name]['url'] = patterns[name]['url']
+    data['data'][name]['name'] = patterns[name]['name']
   return data
 
 def parser(patterns, h, data):
@@ -282,15 +275,11 @@ def parser(patterns, h, data):
           data['data'][name]['last'] = today_in_seconds
           try:
             data['data'][name][today_in_seconds] = set(data['data'][name][today_in_seconds])
-          except:
+          except KeyError:
             data['data'][name][today_in_seconds] = set()
           data['data'][name][today_in_seconds].add(fileurl)
           data['data'][name][today_in_seconds] = list(data['data'][name][today_in_seconds])
         if today_in_seconds in data['data'][name]:
-          try:
-            data['dates']
-          except KeyError:
-            data['dates'] = {}
           try:
             data['dates'][today_in_seconds]
           except KeyError:
@@ -329,7 +318,7 @@ def usage():
       '-d, --export-days        : export days to separate json files\n'
       '--rebuild-days           : rebuild all day files\n'
       '-m, --export-meta        : export meta data\n'
-      '--meta-file file         : specify output meta data file\n'
+      '--meta-file=file         : specify output meta data file\n'
       '--no-scrape              : do not scrape\n'
       )
 
