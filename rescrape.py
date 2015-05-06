@@ -11,6 +11,7 @@ import datetime
 import time
 import errno
 import os
+import copy
 
 #options
 _img_headers = [('User-Agent', 'Mozilla/5.0')] 
@@ -29,6 +30,8 @@ _export_days = False
 _export_meta = False
 _debug = False
 _mode = 0o777
+_req_timeout = 5
+_tries = 3
 
 def initDay(date, data):
   day = {}
@@ -111,6 +114,7 @@ def decode_to_str(content, suggestion = ''):
     if suggestion != '':
       try:
         content = content.decode(suggestion)
+        return content
       except UnicodeDecodeError as e:
         if _debug:
           print(e + ": Suggested decoding not succesful.", file=stderr)
@@ -210,7 +214,7 @@ def init_data(data, patterns):
       try:
         data['data'][name][key]
       except KeyError:
-        data['data'][name][key] = objs[key]
+        data['data'][name][key] = copy.deepcopy(objs[key]) # create a copy of the object, not the reference
     try:
       baseurl = patterns[name]['baseurl']
     except KeyError:
@@ -220,38 +224,55 @@ def init_data(data, patterns):
     data['data'][name]['name'] = patterns[name]['name']
   return data
 
+def httplib2_request(h, url_to_parse):
+  n = 0
+  while n < _tries:
+    try:
+      response, content = None, None # request timeout returns nothing
+      response, content = h.request(url_to_parse, headers=_feed_headers) #httplib2 takes dictionary of headers
+    except httplib2.ServerNotFoundError as e:
+      print(name + " ServerNotFound: " + url_to_parse, file=stderr)
+      if _debug:
+        print(e, file=stderr)
+      return None, None
+    except KeyboardInterrupt: # why does this make it work?
+      exit(1)
+    except BaseException as e:
+      try:
+        errno_ = e.errno
+        if errno_ == errno.ECONNRESET:
+          print('Connection reset', file=stderr)
+          return None, None
+      except NameError as e:
+        if _debug:
+          print("Unknown request error", file=stderr)
+          print(e, file=stderr)
+        return None, None
+    if response == None:
+      print('Connection timeout ' + str(n), file=stderr)
+      n += 1
+    else:
+      return response, content
+  return response, content
+
 def parser(patterns, h, data):
   data = init_data(data, patterns)
-  for name in patterns:
+  for name in patterns.keys():
     pattern = patterns[name]['pattern']
     url = patterns[name]['url']
     try:
       url_to_parse = patterns[name]['feed']
     except KeyError:
       url_to_parse = url
-    try:
-      response, content = h.request(url_to_parse, headers=_feed_headers) #httplib2 takes dictionary of headers
-    except httplib2.ServerNotFoundError as e:
-      print(name + " ServerNotFound: " + url_to_parse, file=stderr)
-      if _debug:
-        print(e, file=stderr)
-      continue
-    except BaseException as e:
-      try:
-        errno_ = e.errno
-        if errno_ == errno.ECONNRESET:
-          print(name + ': reset connection', file=stderr)
-          continue
-      except NameError as e:
-        if _debug:
-          print("Unknown request error", file=stderr)
-          print(e, file=stderr)
-        continue
-    content = decode_to_str(content)
-    if content == '' or type(content) is not str:
-      print("Unable to decode page for " + name, file=stderr)
+#    print("Requesting " + url_to_parse + " for " + name)
+    response, content = httplib2_request(h, url_to_parse)
+    if response == None:
       continue
     if (response.status == 200):
+      content = decode_to_str(content)
+      if content == '' or type(content) is not str:
+        print("Unable to decode page for " + name, file=stderr)
+        continue
       match = re.search(pattern, content, re.DOTALL)
       try:
         match = match.groupdict()
@@ -267,9 +288,9 @@ def parser(patterns, h, data):
       except KeyError:
         alt = ""
       alt = re.sub("['\"]", "&#39", alt);
-      if (fileurl != None):
+      if fileurl != None:
         today_in_seconds = repr(int((time.mktime(datetime.date.today().timetuple()))*1000))
-        if (fileurl not in data['data'][name]['file']):
+        if fileurl not in data['data'][name]['file']:
           data['data'][name]['file'].append(fileurl)
           data['data'][name]['alttxt'][fileurl] = alt
           data['data'][name]['last'] = today_in_seconds
@@ -285,10 +306,9 @@ def parser(patterns, h, data):
           except KeyError:
             data['dates'][today_in_seconds] = set()
           data['dates'][today_in_seconds].add(name)
-        if (_store_img and fileurl not in data['data'][name]['local']):
-          local_file_name = ''
-          local_file_name = write_image_file(url_to_parse, data['data'][name]['baseurl'] + fileurl, name, local_file_name)
-          if (local_file_name != ''):
+        if _store_img and fileurl not in data['data'][name]['local']:
+          local_file_name = write_image_file(url_to_parse, data['data'][name]['baseurl'] + fileurl, name)
+          if local_file_name != '':
             data['data'][name]['local'][fileurl] = local_file_name
     else:
         print(name + ': Error response ' + str(response.status))
@@ -432,7 +452,7 @@ def main():
       if (_debug):
         print(e, file=stderr)
       exit(2)
-  h = httplib2.Http(_cache_dir)
+  h = httplib2.Http(_cache_dir, timeout=_req_timeout)
   if _no_scrape == False:
     data = parser(patterns, h, data)
   if _export_meta:
