@@ -30,8 +30,8 @@ _export_days = False
 _export_meta = False
 _debug = False
 _mode = 0o777
-_req_timeout = 5
-_tries = 3
+_req_timeout = 3
+_tries = 1
 
 def initDay(date, data):
   day = {}
@@ -249,15 +249,15 @@ def httplib2_request(h, url_to_parse):
           print(e, file=stderr)
         return None, None
     if response == None:
-      print('Connection timeout ' + str(n), file=stderr)
       n += 1
+      print('Connection timeout ' + str(n), file=stderr)
     else:
       return response, content
   return response, content
 
 def parser(patterns, h, data):
   data = init_data(data, patterns)
-  for name in patterns.keys():
+  for name in patterns:
     pattern = patterns[name]['pattern']
     url = patterns[name]['url']
     try:
