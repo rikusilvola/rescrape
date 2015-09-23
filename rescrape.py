@@ -19,7 +19,7 @@ _feed_headers = {'User-Agent':'Mozilla/5.0'}
 _data_dir = 'data'
 _img_dir = 'img'
 _cache_dir = '.cache'
-_pattern_json = ''
+_pattern_json = 'patterns.json'
 _input_json = ''
 _output_json = ''
 _meta_json = ''
@@ -32,27 +32,29 @@ _debug = False
 _mode = 0o777
 _req_timeout = 3
 _tries = 1
+_data_key = 'data'
+_meta_key = 'meta'
 
 def initDay(date, data):
   day = {}
-  day['data'] = {}
+  day[_data_key] = {}
   for name in data['dates'][date]:
-    day['data'][name] = {}
-    day['data'][name]['file'] = []
-    day['data'][name]['alttxt'] = {}
-    day['data'][name]['local'] = {}
-    day['data'][name][date] = []
-    day['data'][name][date] = data['data'][name][date]
-    for filename in day['data'][name][date]:
-      day['data'][name]['alttxt'][filename] = data['data'][name]['alttxt'][filename]
+    day[_data_key][name] = {}
+    day[_data_key][name]['file'] = []
+    day[_data_key][name]['alttxt'] = {}
+    day[_data_key][name]['local'] = {}
+    day[_data_key][name][date] = []
+    day[_data_key][name][date] = data[_data_key][name][date]
+    for filename in day[_data_key][name][date]:
+      day[_data_key][name]['alttxt'][filename] = data[_data_key][name]['alttxt'][filename]
       try:
-        data['data'][name]['local'][filename]
-        day['data'][name]['local'][filename] = data['data'][name]['local'][filename]
+        data[_data_key][name]['local'][filename]
+        day[_data_key][name]['local'][filename] = data[_data_key][name]['local'][filename]
       except KeyError: # no local file
         pass
-    day['data'][name]['name'] = data['data'][name]['name']
-    day['data'][name]['url'] = data['data'][name]['url']
-    day['data'][name]['baseurl'] = data['data'][name]['baseurl']
+    day[_data_key][name]['name'] = data[_data_key][name]['name']
+    day[_data_key][name]['url'] = data[_data_key][name]['url']
+    day[_data_key][name]['baseurl'] = data[_data_key][name]['baseurl']
   return day
 
 def export_daydata(date, data):
@@ -84,14 +86,14 @@ def export_daydata(date, data):
 
 def export_metadata(data):
   names = {};
-  names['meta'] = {}
+  names[_meta_key] = {}
   for name in data:
-    names['meta'][name] = {}
-    names['meta'][name]['name'] = data[name]['name']
+    names[_meta_key][name] = {}
+    names[_meta_key][name]['name'] = data[name]['name']
     try:
-      names['meta'][name]['last'] = data[name]['last']
+      names[_meta_key][name]['last'] = data[name]['last']
     except KeyError:
-      names['meta'][name]['last'] = 0 
+      names[_meta_key][name]['last'] = 0 
   return names
 
 def sanitize_url(url):
@@ -202,26 +204,26 @@ def init_data(data, patterns):
   except KeyError:
     data['dates'] = {}
     try:
-      data['data']
+      data[_data_key]
     except KeyError:
-      data['data'] = {}
+      data[_data_key] = {}
   for name in patterns:
     try:
-      data['data'][name]
+      data[_data_key][name]
     except KeyError:
-      data['data'][name] = {}
+      data[_data_key][name] = {}
     for key in keys: # init key if not exist
       try:
-        data['data'][name][key]
+        data[_data_key][name][key]
       except KeyError:
-        data['data'][name][key] = copy.deepcopy(objs[key]) # create a copy of the object, not the reference
+        data[_data_key][name][key] = copy.deepcopy(objs[key]) # create a copy of the object, not the reference
     try:
       baseurl = patterns[name]['baseurl']
     except KeyError:
       baseurl = ""
-    data['data'][name]['baseurl'] = baseurl
-    data['data'][name]['url'] = patterns[name]['url']
-    data['data'][name]['name'] = patterns[name]['name']
+    data[_data_key][name]['baseurl'] = baseurl
+    data[_data_key][name]['url'] = patterns[name]['url']
+    data[_data_key][name]['name'] = patterns[name]['name']
   return data
 
 def httplib2_request(h, url_to_parse):
@@ -290,26 +292,26 @@ def parser(patterns, h, data):
       alt = re.sub("['\"]", "&#39", alt);
       if fileurl != None:
         today_in_seconds = repr(int((time.mktime(datetime.date.today().timetuple()))*1000))
-        if fileurl not in data['data'][name]['file']:
-          data['data'][name]['file'].append(fileurl)
-          data['data'][name]['alttxt'][fileurl] = alt
-          data['data'][name]['last'] = today_in_seconds
+        if fileurl not in data[_data_key][name]['file']:
+          data[_data_key][name]['file'].append(fileurl)
+          data[_data_key][name]['alttxt'][fileurl] = alt
+          data[_data_key][name]['last'] = today_in_seconds
           try:
-            data['data'][name][today_in_seconds] = set(data['data'][name][today_in_seconds])
+            data[_data_key][name][today_in_seconds] = set(data[_data_key][name][today_in_seconds])
           except KeyError:
-            data['data'][name][today_in_seconds] = set()
-          data['data'][name][today_in_seconds].add(fileurl)
-          data['data'][name][today_in_seconds] = list(data['data'][name][today_in_seconds])
-        if today_in_seconds in data['data'][name]:
+            data[_data_key][name][today_in_seconds] = set()
+          data[_data_key][name][today_in_seconds].add(fileurl)
+          data[_data_key][name][today_in_seconds] = list(data[_data_key][name][today_in_seconds])
+        if today_in_seconds in data[_data_key][name]:
           try:
             data['dates'][today_in_seconds]
           except KeyError:
             data['dates'][today_in_seconds] = set()
           data['dates'][today_in_seconds].add(name)
-        if _store_img and fileurl not in data['data'][name]['local']:
-          local_file_name = write_image_file(url_to_parse, data['data'][name]['baseurl'] + fileurl, name)
+        if _store_img and fileurl not in data[_data_key][name]['local']:
+          local_file_name = write_image_file(url_to_parse, data[_data_key][name]['baseurl'] + fileurl, name)
           if local_file_name != '':
-            data['data'][name]['local'][fileurl] = local_file_name
+            data[_data_key][name]['local'][fileurl] = local_file_name
     else:
         print(name + ': Error response ' + str(response.status))
   try:
@@ -344,7 +346,7 @@ def usage():
 
 def readArgs(args):
   try:
-    opts, args = getopt.getopt(args, "hp:i:o:mdl", ["help", "pattern-file=", "input=", "output=", "io=", "export-days", "rebuild-days", "img-dir=", "data-dir=", "cache-dir=", "debug", "export-meta", "meta-file=", "no-scrape", "store-local-copy", "rebuild-image-db"])
+    opts, args = getopt.getopt(args, "hp:i:o:mdl", ["help", "pattern-file=", "input=", "output=", "io=", "export-days", "rebuild-days", "img-dir=", "data-dir=", "cache-dir=", "debug", "export-meta", "meta-file=", "no-scrape", "store-local-copy", "rebuild-image-db", "dk="])
   except getopt.GetoptError:
     usage()
     exit(2)
@@ -361,10 +363,13 @@ def readArgs(args):
   global _debug
   global _no_scrape
   global _store_img
+  global _data_key
   for opt, arg in opts:
     if opt in ("-h", "--help"):
       usage()
       exit(2)
+    elif opt == "--dk":
+      _data_key = arg
     elif opt == "--io":
       _input_json = arg
       _output_json = arg
@@ -417,6 +422,9 @@ def readArgs(args):
 
 def main():
   readArgs(argv[1:])
+  if _data_key == _meta_key:
+    print("_data_key cannot be identical with _meta_key", file=stderr)
+    exit(2)
   try:
     with open(_pattern_json, 'r', encoding='utf-8') as f:
       try:
@@ -456,7 +464,7 @@ def main():
   if _no_scrape == False:
     data = parser(patterns, h, data)
   if _export_meta:
-    meta = export_metadata(data['data'])
+    meta = export_metadata(data[_data_key])
     if _meta_json != '':
       try:
         with open(_meta_json, 'w', encoding='utf-8') as f:
