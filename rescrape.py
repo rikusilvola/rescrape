@@ -318,10 +318,10 @@ def parser(patterns, h, data):
     data['dates']
     for date in data['dates']: # set -> list as set is not serializable
       data['dates'][date] = list(data['dates'][date])
+      if _export_days:
+        export_daydata(date, data)
   except KeyError as e: # no dates
     pass
-  if _export_days:
-    export_daydata(date, data)
   return data;
 
 def usage():
