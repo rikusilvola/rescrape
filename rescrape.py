@@ -14,7 +14,7 @@ import os
 import copy
 
 #options
-_img_headers = [('User-Agent', 'Mozilla/5.0')] 
+_img_headers = [('User-Agent', 'Mozilla/5.0')]
 _feed_headers = {'User-Agent':'Mozilla/5.0'}
 _data_dir = 'data'
 _img_dir = 'img'
@@ -93,7 +93,7 @@ def export_metadata(data):
     try:
       names[_meta_key][name]['last'] = data[name]['last']
     except KeyError:
-      names[_meta_key][name]['last'] = 0 
+      names[_meta_key][name]['last'] = 0
   return names
 
 def sanitize_url(url):
@@ -134,7 +134,7 @@ def decode_to_str(content, suggestion = ''):
   return content
 
 def replace_file(directory, filename, content, binary = True):
-  full_path = directory + filename 
+  full_path = directory + filename
   write_mode = 'wb' if binary else 'w'
   if os.path.isdir(directory) == False: # create directories if not existing
     try:
@@ -257,6 +257,40 @@ def httplib2_request(h, url_to_parse):
       return response, content
   return response, content
 
+def process_match(match, data, name):
+  try:
+    fileurl = match['file'].rstrip('"');
+  except TypeError:
+    fileurl = None
+  try:
+    alt = match['title']
+  except KeyError:
+    alt = ""
+  alt = re.sub("['\"]", "&#39", alt);
+  if fileurl != None:
+    today_in_seconds = repr(int((time.mktime(datetime.date.today().timetuple()))*1000))
+    if fileurl not in data[_data_key][name]['file']:
+      data[_data_key][name]['file'].append(fileurl)
+      data[_data_key][name]['alttxt'][fileurl] = alt
+      data[_data_key][name]['last'] = today_in_seconds
+      try:
+        data[_data_key][name][today_in_seconds] = set(data[_data_key][name][today_in_seconds])
+      except KeyError:
+        data[_data_key][name][today_in_seconds] = set()
+      data[_data_key][name][today_in_seconds].add(fileurl)
+      data[_data_key][name][today_in_seconds] = list(data[_data_key][name][today_in_seconds])
+    if today_in_seconds in data[_data_key][name]:
+      try:
+        data['dates'][today_in_seconds]
+      except KeyError:
+        data['dates'][today_in_seconds] = set()
+      data['dates'][today_in_seconds].add(name)
+    if _store_img and fileurl not in data[_data_key][name]['local']:
+      local_file_name = write_image_file(url_to_parse, data[_data_key][name]['baseurl'] + fileurl, name)
+      if local_file_name != '':
+        data[_data_key][name]['local'][fileurl] = local_file_name
+  return data
+
 def parser(patterns, h, data):
   data = init_data(data, patterns)
   for name in patterns:
@@ -266,6 +300,21 @@ def parser(patterns, h, data):
       url_to_parse = patterns[name]['feed']
     except KeyError:
       url_to_parse = url
+    try:
+      offset = patterns[name]['offset']
+    except KeyError:
+      offset = 0
+    try:
+      count = patterns[name]['count']
+    except KeyError:
+      count = 1
+    try:
+      step = patterns[name]['step']
+    except KeyError:
+      step = 1
+    if step == 0 or count == 0:
+      print("Malformed pattern for " + name + ". Step and count cannot be 0")
+      exit(2)
 #    print("Requesting " + url_to_parse + " for " + name)
     response, content = httplib2_request(h, url_to_parse)
     if response == None:
@@ -275,43 +324,25 @@ def parser(patterns, h, data):
       if content == '' or type(content) is not str:
         print("Unable to decode page for " + name, file=stderr)
         continue
-      match = re.search(pattern, content, re.DOTALL)
-      try:
-        match = match.groupdict()
-      except AttributeError:
+      matches = list(re.finditer(pattern, content, re.DOTALL))
+      if len(matches) == 0:
         print(name + ': No match, check regexp', file=stderr)
         continue
-      try:
-        fileurl = match['file'].rstrip('"');
-      except TypeError:
-        fileurl = None
-      try:
-        alt = match['title']
-      except KeyError:
-        alt = ""
-      alt = re.sub("['\"]", "&#39", alt);
-      if fileurl != None:
-        today_in_seconds = repr(int((time.mktime(datetime.date.today().timetuple()))*1000))
-        if fileurl not in data[_data_key][name]['file']:
-          data[_data_key][name]['file'].append(fileurl)
-          data[_data_key][name]['alttxt'][fileurl] = alt
-          data[_data_key][name]['last'] = today_in_seconds
-          try:
-            data[_data_key][name][today_in_seconds] = set(data[_data_key][name][today_in_seconds])
-          except KeyError:
-            data[_data_key][name][today_in_seconds] = set()
-          data[_data_key][name][today_in_seconds].add(fileurl)
-          data[_data_key][name][today_in_seconds] = list(data[_data_key][name][today_in_seconds])
-        if today_in_seconds in data[_data_key][name]:
-          try:
-            data['dates'][today_in_seconds]
-          except KeyError:
-            data['dates'][today_in_seconds] = set()
-          data['dates'][today_in_seconds].add(name)
-        if _store_img and fileurl not in data[_data_key][name]['local']:
-          local_file_name = write_image_file(url_to_parse, data[_data_key][name]['baseurl'] + fileurl, name)
-          if local_file_name != '':
-            data[_data_key][name]['local'][fileurl] = local_file_name
+      if count < 0 or count+offset >= len(matches):
+        t = len(matches)
+      else:
+        t = count+offset
+      if step < 0:
+        offset = -offset-1
+        t = -t-1
+      r = range(offset, t, step)
+      for index in r:
+        try:
+          match = matches[index].groupdict()
+        except AttributeError:
+          break
+        print(match['file'])
+        data = process_match(match, data, name)
     else:
         print(name + ': Error response ' + str(response.status))
   try:
@@ -358,8 +389,8 @@ def readArgs(args):
   global _meta_json
   global _rebuild_days
   global _img_dir
-  global _data_dir 
-  global _cache_dir 
+  global _data_dir
+  global _cache_dir
   global _debug
   global _no_scrape
   global _store_img
