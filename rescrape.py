@@ -10,6 +10,7 @@ import time
 import errno
 import os
 import copy
+from lxml import html
 
 #options
 _img_headers = [('User-Agent', 'Mozilla/5.0')]
@@ -309,6 +310,10 @@ def parser(patterns, h, data):
       step = patterns[name]['step']
     except KeyError:
       step = 1
+    try:
+      section = patterns[name]['section']
+    except KeyError:
+      section = ''
     if step == 0 or count == 0:
       print("Malformed pattern for " + name + ". Step and count cannot be 0")
       exit(2)
@@ -321,6 +326,8 @@ def parser(patterns, h, data):
       if content == '' or type(content) is not str:
         print("Unable to decode page for " + name, file=stderr)
         continue
+      if section != '':
+        content = decode_to_str(html.tostring(html.fromstring(content).get_element_by_id(section)))
       matches = list(re.finditer(pattern, content, re.DOTALL))
       if len(matches) == 0:
         print(name + ': No match, check regexp', file=stderr)
@@ -338,7 +345,6 @@ def parser(patterns, h, data):
           match = matches[index].groupdict()
         except AttributeError:
           break
-        print(match['file'])
         data = process_match(match, data, name)
     else:
         print(name + ': Error response ' + str(response.status))
