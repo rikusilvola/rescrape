@@ -231,7 +231,7 @@ def httplib2_request(h, url_to_parse):
       response, content = None, None # request timeout returns nothing
       response, content = h.request(url_to_parse, headers=_feed_headers) #httplib2 takes dictionary of headers
     except httplib2.ServerNotFoundError as e:
-      print(name + " ServerNotFound: " + url_to_parse, file=stderr)
+      print("ServerNotFound: " + str(url_to_parse), file=stderr)
       if _debug:
         print(e, file=stderr)
       return None, None
@@ -241,21 +241,21 @@ def httplib2_request(h, url_to_parse):
       try:
         errno_ = e.errno
         if errno_ == errno.ECONNRESET:
-          print('Connection reset', file=stderr)
+          print('Connection reset: ' + str(url_to_parse), file=stderr)
           return None, None
       except NameError as e:
         if _debug:
-          print("Unknown request error", file=stderr)
+          print("Unknown request error: " + str(url_to_parse), file=stderr)
           print(e, file=stderr)
         return None, None
     if response == None:
       n += 1
-      print('Connection timeout ' + str(n), file=stderr)
     else:
       return response, content
+  print('Connection timeout ' + str(url_to_parse), file=stderr)
   return response, content
 
-def process_match(match, data, name):
+def process_match(match, data, name, ref):
   try:
     fileurl = match['file'].rstrip('"');
   except TypeError:
@@ -284,7 +284,7 @@ def process_match(match, data, name):
         data['dates'][today_in_seconds] = set()
       data['dates'][today_in_seconds].add(name)
     if _store_img and fileurl not in data[_data_key][name]['local']:
-      local_file_name = write_image_file(url_to_parse, data[_data_key][name]['baseurl'] + fileurl, name)
+      local_file_name = write_image_file(ref, data[_data_key][name]['baseurl'] + fileurl, name)
       if local_file_name != '':
         data[_data_key][name]['local'][fileurl] = local_file_name
   return data
@@ -345,7 +345,7 @@ def parser(patterns, h, data):
           match = matches[index].groupdict()
         except AttributeError:
           break
-        data = process_match(match, data, name)
+        data = process_match(match, data, name, url_to_parse)
     else:
         print(name + ': Error response ' + str(response.status))
   try:
