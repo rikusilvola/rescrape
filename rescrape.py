@@ -1,11 +1,9 @@
-# comic scraper
 import httplib2
 import urllib.request
 import urllib.parse
 from sys import argv, exit, stderr
 import getopt
 import json
-import pickle
 import re # awaking cthulhu
 import datetime
 import time
@@ -167,7 +165,6 @@ def replace_file(directory, filename, content, binary = True):
 def write_image_file(ref, url, name, filename = ''):
   url = sanitize_url(url)
   try:
-    one = 1
     opener = urllib.request.build_opener()
     header = _img_headers[0:]
     header.append(('Referer', ref)) # add refer to get passed referer checks
@@ -320,7 +317,7 @@ def parser(patterns, h, data):
       data['dates'][date] = list(data['dates'][date])
       if _export_days:
         export_daydata(date, data)
-  except KeyError as e: # no dates
+  except KeyError: # no dates
     pass
   return data;
 
