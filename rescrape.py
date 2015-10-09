@@ -13,8 +13,8 @@ import copy
 from lxml import html
 
 #options
-_img_headers = [('User-Agent', 'Mozilla/5.0')]
-_feed_headers = {'User-Agent':'Mozilla/5.0'}
+_img_headers = [('User-Agent', 'Telnet')]
+_feed_headers = {'User-Agent':'Telnet'}
 _data_dir = 'data'
 _img_dir = 'img'
 _cache_dir = '.cache'
@@ -34,6 +34,10 @@ _tries = 1
 _data_key = 'data'
 _meta_key = 'meta'
 
+#initializes a data structure for holding data for a singular day then copies data pertaining to that date to it
+#@param date date in the unix time format
+#@param data data structure holding all data to be copied
+#@return a data structure holding the data for the specified date
 def initDay(date, data):
   day = {}
   day[_data_key] = {}
@@ -56,6 +60,9 @@ def initDay(date, data):
     day[_data_key][name]['baseurl'] = data[_data_key][name]['baseurl']
   return day
 
+#writes files holding data from specified date
+#@param date date in the unix time format
+#@param data data structure holding all data to be copied
 def export_daydata(date, data):
   today_in_seconds = repr(int((time.mktime(datetime.date.today().timetuple()))*1000))
   yesterday_in_seconds = repr(int((time.mktime((datetime.date.today() - datetime.timedelta(1)).timetuple()))*1000))
@@ -83,6 +90,9 @@ def export_daydata(date, data):
       with open(dayfile, 'w', encoding='utf-8') as f:
         json.dump(day, f)
 
+#exports meta data from the full data structure
+#@param data data structure holding all data from which meta data is to be exported
+#@return the exported metadata structure
 def export_metadata(data):
   names = {};
   names[_meta_key] = {}
@@ -95,6 +105,9 @@ def export_metadata(data):
       names[_meta_key][name]['last'] = 0
   return names
 
+#sanitizes URLs, adding protocol if needed
+#@param url the URL to be sanitized
+#@return the sanitized URL
 def sanitize_url(url):
   url = urllib.parse.urlsplit(url)
   url = list(url)
@@ -104,6 +117,11 @@ def sanitize_url(url):
   url = urllib.parse.urlunsplit(url)
   return url
 
+#wrapper to try and decode binary content into a string
+#tries codes specified in codes, starting with suggestion if provided
+#@param content binary content to be decoded to string
+#@param suggestion suggested encoding to try first (optional)
+#@return decoded content string, empty string if decoding was not possible
 def decode_to_str(content, suggestion = ''):
   codes = ['utf-8', 'windows-1252', 'ascii']
   try:
@@ -132,6 +150,12 @@ def decode_to_str(content, suggestion = ''):
         continue
   return content
 
+#wrapper for writing and replacing files, creates directories if necessary
+#@param directory the path to write to
+#@param filename the file name to be used
+#@param content the content to write
+#@param binary boolean to write a binary file or not. (optional)
+#@return True if write was succesful, False if not
 def replace_file(directory, filename, content, binary = True):
   full_path = directory + filename
   write_mode = 'wb' if binary else 'w'
@@ -163,6 +187,12 @@ def replace_file(directory, filename, content, binary = True):
     return False
   return True
 
+#wrapper for requesting and writing image files
+#@param ref the referrer url
+#@param url the url of the image to be requested
+#@param name the name of the of the source, used as part of path
+#@param filename the filename to be used. If left empty, generated in function
+#@return the filename used
 def write_image_file(ref, url, name, filename = ''):
   url = sanitize_url(url)
   try:
@@ -193,6 +223,10 @@ def write_image_file(ref, url, name, filename = ''):
   finally:
     return filename
 
+#initializes the main data structure from patterns data
+#@param data the data structure to initialize
+#@param patterns the pattern data
+#@return the main data structure
 def init_data(data, patterns):
   keys = ['file', 'alttxt', 'local', 'last']
   objs = {'file': [], 'alttxt': {}, 'local': {}, 'last': 0}
@@ -224,6 +258,10 @@ def init_data(data, patterns):
     data[_data_key][name]['name'] = patterns[name]['name']
   return data
 
+#wrapper for http2lib requests
+#@param h http2lib Http object
+#@param url_to_parse the url to request
+#@return response and content retrieved
 def httplib2_request(h, url_to_parse):
   n = 0
   while n < _tries:
@@ -255,6 +293,12 @@ def httplib2_request(h, url_to_parse):
   print('Connection timeout ' + str(url_to_parse), file=stderr)
   return response, content
 
+#processes individual matches
+#@param match re.match groupdict object
+#@param data the main data structure
+#@param name the source name
+#@param ref the referrer URL
+#@return the main data structure
 def process_match(match, data, name, ref):
   try:
     fileurl = match['file'].rstrip('"');
@@ -289,6 +333,11 @@ def process_match(match, data, name, ref):
         data[_data_key][name]['local'][fileurl] = local_file_name
   return data
 
+#entry point for all, to be renamed
+#@param patterns pattern data structure
+#@param h httplib2 Http object
+#@param data main data structure
+#@return the main data structure
 def parser(patterns, h, data):
   data = init_data(data, patterns)
   for name in patterns:
@@ -358,6 +407,7 @@ def parser(patterns, h, data):
     pass
   return data;
 
+#prints out help
 def usage():
   print( 'usage: rescrape.py [options] ... '
       '[-p pattern-file | -i input-file | -o output-file]\n'
@@ -378,6 +428,8 @@ def usage():
       '--no-scrape              : do not scrape\n'
       )
 
+#reads command line arguments
+#@param args arguments passed on the command line
 def readArgs(args):
   try:
     opts, args = getopt.getopt(args, "hp:i:o:mdl", ["help", "pattern-file=", "input=", "output=", "io=", "export-days", "rebuild-days", "img-dir=", "data-dir=", "cache-dir=", "debug", "export-meta", "meta-file=", "no-scrape", "store-local-copy", "rebuild-image-db", "dk="])
@@ -454,6 +506,7 @@ def readArgs(args):
         '_meta_json : "'    + _meta_json + '"\n'
         '_debug : "'        + str(_debug) + '"\n')
 
+#reads the possible arguments, pattern and data files then calls the parser and finally outputs the results, either to files or to stdout
 def main():
   readArgs(argv[1:])
   if _data_key == _meta_key:
