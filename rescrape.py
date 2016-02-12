@@ -1,4 +1,5 @@
 import httplib2
+import http.client
 import urllib.request
 import urllib.parse
 from sys import argv, exit, stderr
@@ -268,7 +269,7 @@ def httplib2_request(h, url_to_parse):
     try:
       response, content = None, None # request timeout returns nothing
       response, content = h.request(url_to_parse, headers=_feed_headers) #httplib2 takes dictionary of headers
-    except httplib2.BadStatusLine as e:
+    except http.client.BadStatusLine as e:
       print("BadStatusLine: " + str(url_to_parse), file=stderr)
       if _debug:
         print(e, file=stderr)
