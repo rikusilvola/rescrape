@@ -268,6 +268,11 @@ def httplib2_request(h, url_to_parse):
     try:
       response, content = None, None # request timeout returns nothing
       response, content = h.request(url_to_parse, headers=_feed_headers) #httplib2 takes dictionary of headers
+    except httplib2.BadStatusLine as e:
+      print("BadStatusLine: " + str(url_to_parse), file=stderr)
+      if _debug:
+        print(e, file=stderr)
+      return None, None
     except httplib2.ServerNotFoundError as e:
       print("ServerNotFound: " + str(url_to_parse), file=stderr)
       if _debug:
