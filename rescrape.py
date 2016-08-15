@@ -114,7 +114,7 @@ def sanitize_url(url):
   url = list(url)
   if (url[0] == ''): #scheme
     url[0] = 'http'
-  url[2] = urllib.parse.quote(url[2])
+  url[2] = urllib.parse.quote(url[2], safe="%/:=&?~#+!$,;'@()*[]")
   url = urllib.parse.urlunsplit(url)
   return url
 
