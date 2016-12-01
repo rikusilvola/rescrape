@@ -382,7 +382,11 @@ def parser(patterns, h, data):
         print("Unable to decode page for " + name, file=stderr)
         continue
       if section != '':
-        content = decode_to_str(html.tostring(html.fromstring(content).get_element_by_id(section)))
+        try:
+          content = decode_to_str(html.tostring(html.fromstring(content).get_element_by_id(section)))
+        except IndexError:
+          print(name + ": No match for section id '" + section + "'");
+          continue
       matches = list(re.finditer(pattern, content, re.DOTALL))
       if len(matches) == 0:
         print(name + ': No match, check regexp', file=stderr)
